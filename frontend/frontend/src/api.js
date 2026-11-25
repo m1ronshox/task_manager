@@ -1,49 +1,40 @@
 import axios from "axios";
 
-const apiUrl = import.meta.env.VITE_API_URL || (
+const address = import.meta.env.VITE_API_URL || (
   import.meta.env.DEV ? "http://127.0.0.1:8000" : "https://task-manager-turl.onrender.com"
 );
-const baseURL = apiUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "") + "/api";
+const baseURL = address.trim().replace(/\/+$/, "").replace(/\/api$/, "") + "/api";
 const API = axios.create({ baseURL });
-const authAPI = axios.create({ baseURL });
-
-let telegramSession;
+const sessionAPI = axios.create({ baseURL });
+let session;
 
 API.interceptors.request.use(async (request) => {
   const initData = window.Telegram?.WebApp?.initData;
-  if (!initData) return request;
-
-  if (telegramSession?.initData !== initData) {
-    const session = {
+  if (!initData || request.url === "/auto/catalog") return request;
+  if (session?.initData !== initData) {
+    const current = {
       initData,
-      token: authAPI.post("/auth/telegram", { init_data: initData })
+      token: sessionAPI.post("/auth/telegram", { init_data: initData })
         .then(({ data }) => data.access_token)
         .catch((error) => {
-          if (telegramSession === session) telegramSession = undefined;
+          if (session === current) session = undefined;
           throw error;
         }),
     };
-    telegramSession = session;
+    session = current;
   }
-
-  request.headers.set("Authorization", `Bearer ${await telegramSession.token}`);
+  request.headers.set("Authorization", `Bearer ${await session.token}`);
   return request;
 });
 
-export const getTasks = () => {
-  return API.get("/tasks");
-};
+export async function request(path, method = "get", data, params) {
+  return (await API({ url: "/auto" + path, method, data, params })).data;
+}
 
-export const createTask = (title) => {
-  return API.post("/tasks", { title });
-};
-
-export const updateTask = (taskId, data) => {
-  return API.patch(`/tasks/${taskId}`, data);
-};
-
-export const deleteTask = (taskId) => {
-  return API.delete(`/tasks/${taskId}`);
-};
-
-export default API;
+export function errorText(error) {
+  const detail = error.response?.data?.detail;
+  if (error.response?.status === 401) return "Ilovani Telegram bot orqali oching yoki qayta oching.";
+  return typeof detail === "string" ? detail
+    : Array.isArray(detail) ? "Kiritilgan maydonlarni tekshiring."
+    : "Server bilan bog‘lanib bo‘lmadi. Qayta urinib ko‘ring.";
+}

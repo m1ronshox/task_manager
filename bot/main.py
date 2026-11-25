@@ -1,20 +1,19 @@
 import asyncio
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from aiogram import Bot, Dispatcher
-from aiogram.filters import CommandStart, Command
-from aiogram.types import (
-    Message,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    WebAppInfo
-)
+from aiogram.filters import Command, CommandStart
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
 from config import BOT_TOKEN, WEBAPP_URL
 
-
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+WELCOME = (
+    "Assalomu alaykum! Buxoro Avto Magnat platformasiga xush kelibsiz. "
+    "Avtomobilingiz uchun kerakli xizmatlar va ehtiyot qismlarni bir joydan toping."
+)
 
 
 def get_main_keyboard():
@@ -22,52 +21,32 @@ def get_main_keyboard():
     if url.scheme != "https" or not url.hostname or "." not in url.hostname:
         return None
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Open Task Manager",
-                    web_app=WebAppInfo(
-                        url=WEBAPP_URL
-                    )
-                )
-            ]
-        ]
+    buttons = (
+        ("Avto Magnat ilovasini ochish", "home"),
+        ("Xizmatlar", "services"),
+        ("Mening buyurtmalarim", "orders"),
+        ("Aloqa", "contact"),
     )
-
-    return keyboard
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=label, web_app=WebAppInfo(
+            url=urlunsplit((url.scheme, url.netloc, url.path, urlencode({"view": view}), ""))
+        ))] for label, view in buttons
+    ])
 
 
 @dp.message(CommandStart())
 async def start_handler(message: Message):
-
-    user = message.from_user
-    keyboard = get_main_keyboard() if message.chat.type == "private" else None
-    instructions = (
-        "Kundalik vazifalaringizni boshqarish uchun quyidagi tugmani bosing."
-        if keyboard
-        else "Task Manager uchun HTTPS manzil hali sozlanmagan. /help orqali yordam oling."
-    )
-
     if message.chat.type != "private":
-        instructions = "Task Manager ilovasini bot bilan shaxsiy chatda oching."
-
-    await message.answer(
-        f"Assalomu alaykum, {user.first_name}! 👋\n\n"
-        "Task Manager ilovasiga xush kelibsiz.\n\n"
-        f"{instructions}",
-        reply_markup=keyboard
-    )
+        await message.answer("Ilovani @BuxaraAvtoMagnatBot bilan shaxsiy chatda oching.")
+        return
+    keyboard = get_main_keyboard()
+    await message.answer(WELCOME if keyboard else f"{WELCOME}\n\nIlova manzili hozircha sozlanmagan.",
+                         reply_markup=keyboard)
 
 
 @dp.message(Command("help"))
 async def help_handler(message: Message):
-
-    await message.answer(
-        "Task Manager bot yordam bo'limi.\n\n"
-        "/start - Ilovani ochish\n"
-        "/help - Yordam"
-    )
+    await message.answer("/start orqali avtoservis, buyurtmalar va aloqa bo‘limlarini oching.")
 
 
 async def main():

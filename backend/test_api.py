@@ -114,7 +114,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/health").json(), {"status": "ok"})
         preflight = {
-            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Method": "PUT",
             "Access-Control-Request-Headers": "authorization,content-type",
         }
         allowed = self.client.options("/api/tasks/1", headers={**preflight, "Origin": ORIGIN})

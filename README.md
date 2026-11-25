@@ -1,63 +1,48 @@
-# Task Manager’ni Render’da ishga tushirish
+# Buxoro Avto Magnat
 
-Backend manzili `https://task-manager-turl.onrender.com`. Frontend alohida Static Site sifatida, Telegram bot esa bitta Python Background Worker sifatida ishlaydi.
+Avtoservisga yozilish, ehtiyot qismlar katalogi va avtomobil texnik tarixini boshqarish uchun Telegram Mini App. Loyiha mavjud FastAPI, React, PostgreSQL va Render xizmatlaridan foydalanadi.
 
-## 1. Token va ma’lumotlarni tayyorlash
+## Lokal ishga tushirish
 
-- Git tarixida saqlangan eski bot tokenini BotFather’da bekor qiling. Yangi `BOT_TOKEN` qiymatini backend va bot worker Environment bo’limlariga bir xil kiriting.
-- JWT kalitini `python -c "import secrets; print(secrets.token_urlsafe(48))"` orqali yarating va faqat backend’da `JWT_SECRET` sifatida saqlang.
-- Eski bazadagi ma’lumot kerak bo’lsa, yangi deploydan oldin ishlab turgan SQLite bazasidan izchil zaxira oling. Yozuvlarni vaqtincha to’xtatib, ishlayotgan bazaning zaxirasini ishlating. Repo bilan kelgan lokal nusxa production bazasidan farq qilishi mumkin.
-
-## 2. Mavjud backend va PostgreSQL
-
-Render’da mavjud backend bilan bir regionda PostgreSQL yarating. Backend Environment bo’limida quyidagilarni o’rnating.
-
-| O’zgaruvchi | Qiymat |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL xizmatining **Internal Database URL** qiymati |
-| `BOT_TOKEN` | BotFather bergan yangi token |
-| `JWT_SECRET` | Yuqorida yaratilgan kalit |
-| `FRONTEND_ORIGINS` | Frontend’ning haqiqiy HTTPS origin’i, masalan `https://task-manager-frontend.onrender.com`. Bir nechta domenni vergul bilan ajrating. |
-| `PYTHON_VERSION` | `3.13.15` |
-
-Backend Web Service sozlamalari:
-
-| Sozlama | Qiymat |
-| --- | --- |
-| Branch | `main` |
-| Root Directory | `backend` |
-| Build Command | `pip install -r requirements.txt` |
-| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1` |
-| Health Check Path | `/health` |
-
-Backend ishga tushganda jadvallarni yaratadi. `/health` PostgreSQL ulanishini ham tekshiradi. Agar SQLite’dan ko’chirish kerak bo’lsa, yangi frontend’ni foydalanuvchilarga ochishdan oldin import qiling. Mahalliy muhitda backend paketlarini o’rnating, `DATABASE_URL` uchun yangi bazaning External Database URL manzilini SSL bilan ishlating va loyiha ildizidan ishga tushiring:
+Backend uchun `backend/.env.example` asosida `backend/.env` yarating. Telegram ichidan kirish uchun `BOT_TOKEN` va kamida 32 belgilik `JWT_SECRET` kerak. Lokal brauzer sinovida `ALLOW_LOCAL_DEV=1` va loopback manzilidan foydalaning. SQLite lokal test uchun standart, Render’da PostgreSQL ishlatiladi.
 
 ```sh
-python backend/import_sqlite.py /path/to/sqlite-backup.db
+cd backend
+pip install -r requirements-dev.txt
+python -m unittest -v
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-Skript bo’sh PostgreSQL bazasiga foydalanuvchilar va vazifalarni mavjud ID’lari bilan ko’chiradi, so’ng yangi yozuvlar uchun ID ketma-ketligini sozlaydi.
+```sh
+cd frontend/frontend
+npm ci
+npm run dev
+npm run lint
+npm run build
+```
 
-## 3. Frontend va bot
+API ishga tushishi bilan Alembic `head` ga o‘tadi. Qo‘lda ishga tushirish uchun backend katalogidan `alembic upgrade head` buyrug‘ini bajaring. Birinchi migratsiya eski `users` va `tasks` jadvallarini saqlaydi, faqat yetishmayotgan jadvallar va boshlang‘ich xizmat kategoriyalarini qo‘shadi. Eski vazifalar API orqali saqlanib qoladi va yangi interfeysda ko‘rsatilmaydi. PostgreSQL testlari uchun `TEST_DATABASE_URL` orqali alohida, bo‘sh test bazasini `postgresql+psycopg://` formatida bering.
 
-`render.yaml` frontend va bot worker’ni yaratish uchun tayyor. Pushdan keyin Render Dashboard’da **New ’ Blueprint** orqali `main` branchini tanlang. Blueprint’dagi worker `starter` tarifida. Mavjud backend va PostgreSQL yuqoridagi Dashboard sozlamalari orqali boshqariladi.
+## Render sozlamalari
 
-Agar frontend URL’i oldindan ma’lum bo’lmasa, avval Dashboard orqali Static Site yarating. Keyin bot uchun shu URL’ni kiriting.
-
-| Xizmat | Sozlamalar |
+| Xizmat | Sozlama |
 | --- | --- |
-| Static Site | Branch `main`, Root Directory `frontend/frontend`, Build Command `npm ci && npm run build`, Publish Directory `dist` |
-| Static Site Environment | `VITE_API_URL=https://task-manager-turl.onrender.com`, `NODE_VERSION=24.11.1`, `SKIP_INSTALL_DEPS=true` |
-| Background Worker | Branch `main`, Root Directory `bot`, Build Command `pip install -r requirements.txt`, Start Command `python main.py`, bitta instance |
-| Worker Environment | `BOT_TOKEN`, frontend’ning HTTPS manzili sifatida `WEBAPP_URL`, `PYTHON_VERSION=3.13.15` |
+| Mavjud FastAPI Web Service | `main`, ildiz `backend`, build `pip install -r requirements.txt`, start `uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1`, health `/health` |
+| Mavjud React Static Site | `main`, ildiz `frontend/frontend`, build `npm ci && npm run build`, publish `dist` |
+| Mavjud PostgreSQL | Backend bilan bir region, `DATABASE_URL` uchun Internal Database URL |
 
-Worker ishga tushishidan oldin shu token bilan ishlayotgan eski bot jarayonini to’xtating. Worker Telegram long polling’iga o’tishda avvalgi webhook’ni olib tashlaydi. `VITE_API_URL` o’zgarsa frontend’ni qayta build qiling. Frontend’ning yakuniy manzilini backend’dagi `FRONTEND_ORIGINS` va worker’dagi `WEBAPP_URL` bilan moslang.
+Backend Environment bo‘limiga `DATABASE_URL`, `JWT_SECRET`, `BOT_TOKEN`, `FRONTEND_ORIGINS=https://task-manager-1-fn25.onrender.com`, `PYTHON_VERSION=3.13.15` va administratorlarning vergul bilan ajratilgan sonli Telegram ID qiymatlari sifatida `ADMIN_TELEGRAM_IDS` ni kiriting. Administrator bo‘limi faqat tasdiqlangan Telegram sessiyasi va shu ro‘yxatdagi ID orqali ochiladi.
 
-## 4. Tekshiruv
+Static Site Environment bo‘limiga `VITE_API_URL=https://task-manager-turl.onrender.com`, `NODE_VERSION=24.11.1` va `SKIP_INSTALL_DEPS=true` kiriting. Mavjud xizmatlar uchun Dashboard sozlamalarini saqlang. `render.yaml` faqat yangi Static Site kerak bo‘lganda ishlatilishi mumkin.
 
-1. `https://task-manager-turl.onrender.com/health` manzili `200` qaytarishini tekshiring.
-2. Telegram’da botga shaxsiy chatda `/start` yuboring va **Open Task Manager** tugmasini bosing.
-3. Birinchi ochilishda foydalanuvchi Telegram ID orqali ro’yxatdan o’tadi. Keyingi ochilishda mavjud profil qayta ishlatiladi. Frontend `POST /api/auth/telegram` orqali JWT oladi va vazifa so’rovlarida Bearer token yuboradi.
-4. Vazifa yarating, bajarilgan deb belgilang, ilovani qayta ochib yozuv saqlanganini tekshiring, so’ng vazifani o’chiring.
+Deploydan oldin production bazasining zaxirasini oling. Agar manba eski SQLite bazasi bo‘lsa, izchil SQLite zaxirasini bo‘sh PostgreSQL bazasiga `python backend/import_sqlite.py /path/to/backup.db` orqali import qiling. Tashqaridan import qilishda PostgreSQL External Database URL va TLS ishlating. Free Render PostgreSQL ishlatilsa, 30 kunlik muddat tugashidan oldin bazani eksport qiling.
 
-Lokal API testlari uchun backend katalogidan `pip install -r requirements-dev.txt` va `python -m unittest -v` buyruqlarini bajaring. PostgreSQL bilan shu testlarni bajarish uchun `TEST_DATABASE_URL` orqali alohida, bo’sh baza manzilini `postgresql+psycopg://` formatida bering. Lokal brauzerda Telegram’siz ishlab chiqish uchun backend `.env` fayliga `ALLOW_LOCAL_DEV=1` yozing va backend’ni loopback manzilida ishga tushiring.
+Deploydan so‘ng `/health` va `/api/auto/catalog` javoblarini tekshiring. Admin panelida haqiqiy narx, davomiylik, mavjudlik va aloqa ma’lumotlarini kiriting. Profil bildirishnomalarida yaqin 7 kundagi texnik xizmat eslatmalari ko‘rinadi. Boshlang‘ich xizmatlar bron uchun yopiq. Mahsulot va maxsus takliflar tasdiqlangan biznes ma’lumotlari bilan admin tomonidan yaratiladi. Bron bir xizmat yoki bir avtomobil uchun vaqtlar to‘qnashuvini bloklaydi. Mahsulot buyurtmasida ombor kamayadi, buyurtma bekor qilinganda qaytariladi. Tushum ko‘rsatkichi bajarilgan buyurtma va xizmatlar qiymatini jamlaydi.
+
+## Telegram bot
+
+@BuxaraAvtoMagnatBot uchun `bot/.env.example` asosida lokal `bot/.env` yarating. `BOT_TOKEN` backend bilan bir xil bo‘lsin. `WEBAPP_URL=https://task-manager-1-fn25.onrender.com` ni kiriting. BotFather’da Mini App manzilini sozlang. Gitga faqat `.env.example` fayllari kiritiladi.
+
+Bepul usulda bot kompyuterda `pip install -r bot/requirements.txt` va `python bot/main.py` orqali polling bilan ishlaydi. Bir token uchun bitta jarayon ishlating. Render doimiy Background Worker xizmatini pullik tarifda beradi. Repozitoriydagi Blueprint worker yaratmaydi.
+
+Bot bilan shaxsiy chatda `/start` yuboring. Mini App ochilgach xizmatlar, buyurtmalar va aloqa tugmalarini tekshiring. Backend bron yoki buyurtma yaratilganda va holat o‘zgarganda bildirishnomani bazada saqlaydi hamda Telegram Bot API orqali yuborishga urinadi. Telegram yetkazib berishi uchun foydalanuvchi bot bilan suhbatni boshlagan bo‘lishi kerak.
