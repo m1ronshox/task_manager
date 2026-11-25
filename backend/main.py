@@ -1,44 +1,55 @@
-import os
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from auth import LOCAL_ORIGINS
-
-from database import engine, Base
-import models
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 import task
 import users
+from auth import create_access_token
+from database import Base, engine, get_db
+from schema import TelegramLogin, TokenResponse
+from settings import FRONTEND_ORIGINS
 
-from fastapi.middleware.cors import CORSMiddleware
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
 
 app = FastAPI(
     title="Telegram Task Manager API",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        *LOCAL_ORIGINS,
-        *(origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "").split(",")
-          if origin.strip()),
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=FRONTEND_ORIGINS,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Telegram-Init-Data"],
 )
-
-
-
-Base.metadata.create_all(bind=engine)
 
 app.include_router(users.router)
 app.include_router(task.router)
+
+
+@app.post("/api/auth/telegram", response_model=TokenResponse)
+def login(data: TelegramLogin, db: Session = Depends(get_db)):
+    return TokenResponse(access_token=create_access_token(db, data.init_data))
+
+
+@app.get("/health")
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "ok"}
 
 
 @app.get("/")
 def home():
     return {
         "status": "success",
-        "message": "Task Manager API is running"
+        "message": "Task Manager API is running",
     }

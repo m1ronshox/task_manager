@@ -1,14 +1,32 @@
 import axios from "axios";
 
-const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || (
-    import.meta.env.DEV ? "http://127.0.0.1:8000/api" : "/api"
-  ),
-});
+const apiUrl = import.meta.env.VITE_API_URL || (
+  import.meta.env.DEV ? "http://127.0.0.1:8000" : "https://task-manager-turl.onrender.com"
+);
+const baseURL = apiUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "") + "/api";
+const API = axios.create({ baseURL });
+const authAPI = axios.create({ baseURL });
 
-API.interceptors.request.use((request) => {
+let telegramSession;
+
+API.interceptors.request.use(async (request) => {
   const initData = window.Telegram?.WebApp?.initData;
-  if (initData) request.headers.set("X-Telegram-Init-Data", initData);
+  if (!initData) return request;
+
+  if (telegramSession?.initData !== initData) {
+    const session = {
+      initData,
+      token: authAPI.post("/auth/telegram", { init_data: initData })
+        .then(({ data }) => data.access_token)
+        .catch((error) => {
+          if (telegramSession === session) telegramSession = undefined;
+          throw error;
+        }),
+    };
+    telegramSession = session;
+  }
+
+  request.headers.set("Authorization", `Bearer ${await telegramSession.token}`);
   return request;
 });
 

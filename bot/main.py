@@ -70,5 +70,11 @@ async def help_handler(message: Message):
     )
 
 
+async def main():
+    async with bot:
+        await bot.delete_webhook()
+        await dp.start_polling(bot, close_bot_session=False)
+
+
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    asyncio.run(main())

@@ -115,6 +115,7 @@ function App() {
         <form className="task-form" onSubmit={handleAddTask}>
           <input
             type="text"
+            maxLength={255}
             placeholder="Enter a new task..."
             value={title}
             onChange={(e) => setTitle(e.target.value)}

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: task-manager-frontend
+    runtime: static
+    branch: main
+    rootDir: frontend/frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://task-manager-turl.onrender.com
+      - key: NODE_VERSION
+        value: 24.11.1
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+
+  - type: worker
+    name: task-manager-bot
+    runtime: python
+    plan: starter
+    numInstances: 1
+    branch: main
+    rootDir: bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.15
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
