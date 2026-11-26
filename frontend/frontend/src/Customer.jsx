@@ -25,11 +25,11 @@ export function CustomerModal({ modal, close, vehicles, source, run, me, go }) {
   const availableServices = services.filter((item) => !selectedMake || !item.make || item.make.toLowerCase() === selectedMake);
   function submit(event) {
     event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
+    const { booking_date, booking_time, ...values } = Object.fromEntries(new FormData(event.currentTarget));
     if (booking) {
       values.vehicle_id = Number(values.vehicle_id);
       values.service_id = Number(values.service_id);
-      values.starts_at = new Date(`${values.starts_at}:00+05:00`).toISOString();
+      values.starts_at = `${booking_date}T${booking_time}:00+05:00`;
     } else {
       values.year = Number(values.year);
       values.mileage = Number(values.mileage);
@@ -58,7 +58,10 @@ export function CustomerModal({ modal, close, vehicles, source, run, me, go }) {
         {booking ? <>
           <label>Avtomobil<select name="vehicle_id" value={vehicleId} onChange={(event) => setVehicleId(event.target.value)} required><option value="">Tanlang</option>{vehicles.data.map((item) => <option key={item.id} value={item.id}>{item.make} {item.model} · {item.plate}</option>)}</select></label>
           <label>Xizmat<select name="service_id" defaultValue={chosen?.id || ""} required><option value="">Tanlang</option>{availableServices.map((item) => <option key={item.id} value={item.id}>{item.name} · {sum(item.price)}</option>)}</select></label>
-          <FormField name="starts_at" label="Sana va vaqt (Buxoro vaqti)" type="datetime-local" />
+          <div className="form-grid">
+            <FormField name="booking_date" label="Sana" type="date" />
+            <FormField name="booking_time" label="Soat (Buxoro vaqti)" type="time" />
+          </div>
           <FormField name="phone" label="Telefon" type="tel" value={me?.phone} pattern="[+]?[0-9]{7,15}" />
           <label>Muammo haqida izoh<textarea name="notes" maxLength={1200} rows={3} /></label>
         </> : <div className="form-grid">{fields.map(([name, label, type]) => <FormField key={name} name={name} label={label}
