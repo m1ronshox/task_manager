@@ -108,7 +108,8 @@ function Maintenance({ item, close, run }) {
 }
 
 export function Profile({ me, vehicles, modal, run, setLanguage, language, setTheme, theme, go }) {
-  const photo = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url;
+  const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+  const photo = telegramUser?.photo_url;
   const notices = useRemote("/notifications", undefined, Boolean(me.data));
   function submit(event) {
     event.preventDefault();
@@ -126,7 +127,8 @@ export function Profile({ me, vehicles, modal, run, setLanguage, language, setTh
     {me.error && <div className="empty" role="alert">{me.error}</div>}
     {me.data && <><div className="profile-grid"><div className="panel">
       <div className="profile-name">{photo?.startsWith("https://") ? <img src={photo} alt="" /> : <span>{me.data.first_name[0]}</span>}
-        <div><h2>{me.data.first_name}</h2>{me.data.username && <p>@{me.data.username}</p>}</div></div>
+        <div><h2>{me.data.first_name}</h2>{me.data.username && <p>@{me.data.username}</p>}
+          {Number.isSafeInteger(telegramUser?.id) && <p>Telegram ID: {telegramUser.id}</p>}</div></div>
       <form onSubmit={submit}><FormField name="phone" label="Telefon" type="tel" value={me.data.phone} required={false} pattern="[+]?[0-9]{7,15}" />
         <label>Til<select name="language" defaultValue={me.data.language || language}><option value="uz">O‘zbekcha</option><option value="ru">Русский</option><option value="en">English</option></select></label>
         <label>Mavzu<select value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">Qorong‘i</option><option value="light">Yorug‘</option></select></label>
