@@ -83,6 +83,8 @@ label { display: grid; gap: 5px; font-weight: 700; font-size: .85rem; }
 form:not(.search-bar) { display: grid; gap: 13px; margin-top: 13px; }
 form:not(.search-bar) > button { justify-self: start; }
 .form-grid, .profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.profile-preferences { display: grid; gap: 12px; margin-top: 16px; }
+.booking-slots { min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
 .profile-grid h2 { display: flex; align-items: center; gap: 7px; }
 .profile-name { display: flex; align-items: center; gap: 10px; }
 .profile-name img, .profile-name > span { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
@@ -140,6 +142,7 @@ dialog .dialog-feedback-error { background: #ffc2a7; }
   .quick-card strong { font-size: .76rem; }
   .quick-arrow { display: none; }
   .bottom-nav { position: sticky; bottom: 0; z-index: 3; display: grid; grid-template-columns: repeat(5, 1fr); padding: 4px 2px max(env(safe-area-inset-bottom), var(--tg-content-safe-area-inset-bottom, 0px), 3px); background: var(--telegram-bg, var(--bg)); border-top: 1px solid var(--line); }
+  .bottom-nav-admin { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .bottom-nav button { min-height: 48px; display: grid; justify-items: center; align-content: center; gap: 3px; color: var(--muted); font-size: .63rem; padding: 1px; }
   .bottom-nav .current { color: var(--accent); font-weight: 800; }
   .toast { bottom: 68px; }

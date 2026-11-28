@@ -15,5 +15,9 @@ export function useRemote(path, params, enabled = true) {
     return () => { active = false; };
   }, [enabled, key, path, query]);
   const current = enabled && result?.key === key ? result : null;
-  return { ...current, loading: enabled && !current, reload: () => setVersion((value) => value + 1) };
+  function updateData(values) {
+    setResult((previous) => previous?.key === key && previous.data
+      ? { key, data: { ...previous.data, ...values } } : previous);
+  }
+  return { ...current, loading: enabled && !current, reload: () => setVersion((value) => value + 1), updateData };
 }

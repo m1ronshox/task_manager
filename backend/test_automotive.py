@@ -111,12 +111,20 @@ class AutomotiveTests(unittest.TestCase):
         response = self.client.put(f"/api/auto/admin/services/{service['id']}", headers=self.admin,
                                    json={**payload, "price": 50000, "available": True})
         self.assertEqual(response.status_code, 200, response.text)
-        start = datetime.now(timezone.utc) + timedelta(days=3)
+        local_zone = ZoneInfo("Asia/Tashkent")
+        start = (datetime.now(local_zone) + timedelta(days=3)).replace(hour=10, minute=0, second=0, microsecond=0)
+        slots_path = "/api/auto/bookings/slots"
+        params = {"vehicle_id": vehicle, "service_id": service["id"], "day": start.date().isoformat()}
+        self.assertEqual(self.client.get(slots_path, headers=self.outsider, params=params).status_code, 404)
+        self.assertIn(start.isoformat(), self.client.get(slots_path, headers=self.customer, params=params).json())
         data = {"vehicle_id": vehicle, "service_id": service["id"],
                 "starts_at": start.isoformat(), "phone": "+998901234567"}
         self.assertEqual(self.client.post("/api/auto/bookings", headers=self.outsider, json=data).status_code, 404)
         created = self.client.post("/api/auto/bookings", headers=self.customer, json=data)
         self.assertEqual(created.status_code, 201, created.text)
+        self.assertNotIn(start.isoformat(), self.client.get(slots_path, headers=self.customer, params=params).json())
+        bookings = self.client.get("/api/auto/bookings", headers=self.customer).json()
+        self.assertEqual(bookings[0]["service_name"], service["name"])
         conflict = self.client.post("/api/auto/bookings", headers=self.outsider, json={
             **data, "vehicle_id": another, "starts_at": (start + timedelta(minutes=10)).isoformat(),
         })
@@ -135,6 +143,13 @@ class AutomotiveTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 404)
         actual_notices = self.client.get("/api/auto/notifications", headers=self.customer).json()
         self.assertTrue(any(notice["id"] == f"maintenance-{record.json()['id']}" for notice in actual_notices))
+
+    def test_profile_partial_updates_preserve_other_fields(self):
+        path = "/api/auto/me"
+        self.assertEqual(self.client.patch(path, headers=self.customer, json={"phone": "+998901234567"}).status_code, 200)
+        self.assertEqual(self.client.patch(path, headers=self.customer, json={"language": "ru"}).status_code, 200)
+        self.assertEqual(self.client.get(path, headers=self.customer).json()["phone"], "+998901234567")
+        self.assertEqual(self.client.patch(path, headers=self.customer, json={"phone": None}).json()["language"], "ru")
 
     @unittest.skipUnless(os.getenv("TEST_DATABASE_URL"), "PostgreSQL row-lock test")
     def test_concurrent_booking_uses_row_locks(self):

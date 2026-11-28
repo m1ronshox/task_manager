@@ -61,7 +61,8 @@ export default function Admin({ useRemote, run }) {
         }, "Aloqa ma’lumotlari saqlandi");
       }}><FormField name="phone" label="Telefon" type="tel" value={business.data.phone} required={false} />
         <FormField name="address" label="Manzil" value={business.data.address} required={false} maxLength={240} />
-        <FormField name="hours" label="Ish vaqti" value={business.data.hours} required={false} maxLength={160} />
+        <FormField name="hours" label="Ish vaqti" value={business.data.hours} required={false} maxLength={160} placeholder="09:00–18:00" />
+        <p>Yozilish vaqtlarini shu yerda sozlash uchun ish vaqtini 09:00–18:00 ko‘rinishida kiriting.</p>
         <button className="primary">Saqlash</button></form>}</div>}
     {records.error && !["dashboard", "reports", "settings"].includes(section) && <p role="alert">{records.error}</p>}
     {(records.data || []).length > 0 && !["dashboard", "reports", "settings"].includes(section) && <div className="panel table-wrap"><table><thead><tr>{Object.keys(records.data[0]).map((name) => <th key={name}>{name}</th>)}<th>Amallar</th></tr></thead>

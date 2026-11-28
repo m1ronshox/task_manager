@@ -50,21 +50,30 @@ def send_telegram(notification):
             logger.warning("Telegram delivery failed")
 
 
-def reserve(db, user, data):
-    vehicle = owned_vehicle(db, user, data.vehicle_id, lock=True)
-    service = require_row(db, Service, data.service_id, lock=True)
+def booking_service(db, user, vehicle_id, service_id, *, lock=False):
+    vehicle = owned_vehicle(db, user, vehicle_id, lock=lock)
+    service = require_row(db, Service, service_id, lock=lock)
     if not service.available or service.price is None:
         raise HTTPException(409, "Xizmatga yozilish hozircha yopiq")
     if service.make and service.make.casefold() != vehicle.make.casefold():
         raise HTTPException(422, "Xizmat tanlangan avtomobil markasiga mos emas")
+    return service
+
+
+def overlapping_bookings(vehicle_id, service_id, start, end):
+    return select(Booking).where(
+        or_(Booking.service_id == service_id, Booking.vehicle_id == vehicle_id),
+        Booking.status != "cancelled", Booking.starts_at < end, Booking.ends_at > start,
+    )
+
+
+def reserve(db, user, data):
+    service = booking_service(db, user, data.vehicle_id, data.service_id, lock=True)
     start = data.starts_at.astimezone(timezone.utc)
     if start <= datetime.now(timezone.utc):
         raise HTTPException(422, "Kelajakdagi vaqtni tanlang")
     end = start + timedelta(minutes=service.duration)
-    conflict = db.scalar(select(Booking.id).where(
-        or_(Booking.service_id == service.id, Booking.vehicle_id == vehicle.id),
-        Booking.status != "cancelled", Booking.starts_at < end, Booking.ends_at > start,
-    ).limit(1))
+    conflict = db.scalar(overlapping_bookings(data.vehicle_id, service.id, start, end).limit(1))
     if conflict:
         raise HTTPException(409, "Tanlangan vaqt band")
     booking = Booking(**data.model_dump(exclude={"starts_at"}), user_id=user.id,

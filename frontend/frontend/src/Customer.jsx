@@ -14,33 +14,55 @@ const dateDisplay = new Intl.DateTimeFormat("uz-UZ", {
   dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent",
 });
 
-export function CustomerModal({ modal, close, vehicles, source, run, me, go }) {
+export function CustomerModal({ modal, close, vehicles, source, run, me, go, openModal, pending }) {
   const booking = modal.type === "booking";
   const vehicle = modal.type === "vehicle";
   const chosen = modal.item;
   const catalog = source.data;
-  const [vehicleId, setVehicleId] = useState("");
+  const [vehicleId, setVehicleId] = useState(String(modal.vehicleId || ""));
+  const [serviceId, setServiceId] = useState(String(booking ? chosen?.id || "" : ""));
+  const [day, setDay] = useState("");
+  const [start, setStart] = useState("");
+  const today = new Intl.DateTimeFormat("sv-SE", { dateStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date());
   const selectedMake = vehicles.data?.find((item) => String(item.id) === vehicleId)?.make.toLowerCase();
   const services = (catalog?.services || []).filter((item) => item.available);
   const availableServices = services.filter((item) => !selectedMake || !item.make || item.make.toLowerCase() === selectedMake);
+  const selectedService = availableServices.some((item) => String(item.id) === serviceId) ? serviceId : "";
+  const slots = useRemote("/bookings/slots", { vehicle_id: vehicleId, service_id: selectedService, day },
+    Boolean(booking && vehicleId && selectedService && day));
+  const canBook = slots.data?.includes(start);
   function submit(event) {
     event.preventDefault();
-    const { booking_date, booking_time, ...values } = Object.fromEntries(new FormData(event.currentTarget));
+    const values = Object.fromEntries(new FormData(event.currentTarget));
     if (booking) {
-      values.vehicle_id = Number(values.vehicle_id);
-      values.service_id = Number(values.service_id);
-      values.starts_at = `${booking_date}T${booking_time}:00+05:00`;
+      if (!canBook) return;
+      values.vehicle_id = Number(vehicleId);
+      values.service_id = Number(selectedService);
+      values.starts_at = start;
     } else {
       values.year = Number(values.year);
       values.mileage = Number(values.mileage);
       values.image ||= null;
     }
     run(async () => {
-      await request(booking ? "/bookings" : chosen ? `/vehicles/${chosen.id}` : "/vehicles",
-        vehicle && chosen ? "put" : "post", values);
+      let saved;
+      try {
+        saved = await request(booking ? "/bookings" : chosen ? `/vehicles/${chosen.id}` : "/vehicles",
+          vehicle && chosen ? "put" : "post", values);
+      } catch (error) {
+        if (booking) {
+          setStart("");
+          slots.reload();
+        }
+        throw error;
+      }
       if (vehicle) vehicles.reload();
-      close();
-      if (booking) go("orders");
+      if (modal.returnToBooking) {
+        openModal({ ...modal.returnToBooking, vehicleId: saved.id });
+      } else {
+        close();
+        if (booking) go("orders");
+      }
     }, booking ? "Yozilish qabul qilindi" : "Avtomobil saqlandi");
   }
 
@@ -51,23 +73,28 @@ export function CustomerModal({ modal, close, vehicles, source, run, me, go }) {
 
   return <Modal title={booking ? "Avtoservisga yozilish" : chosen ? "Avtomobilni tahrirlash" : "Avtomobil qo‘shish"} close={close}>
     {booking && !vehicles.data?.length ? <><p>{vehicles.error || (vehicles.loading ? "Avtomobillar yuklanmoqda…" : "Yozilish uchun avval avtomobil qo‘shing.")}</p>
-      <button className="secondary" onClick={() => { close(); go("profile"); }}>Profilga o‘tish</button></>
+      {vehicles.data && <button className="secondary" onClick={() => openModal({ type: "vehicle", returnToBooking: modal })}>Avtomobil qo‘shish</button>}</>
       : booking && !catalog ? <p role="status">{source.error || "Xizmatlar yuklanmoqda…"}</p>
       : booking && !services.length ? <p>Hozircha yozilish uchun ochiq xizmatlar mavjud emas.</p>
       : <form onSubmit={submit}>
         {booking ? <>
-          <label>Avtomobil<select name="vehicle_id" value={vehicleId} onChange={(event) => setVehicleId(event.target.value)} required><option value="">Tanlang</option>{vehicles.data.map((item) => <option key={item.id} value={item.id}>{item.make} {item.model} · {item.plate}</option>)}</select></label>
-          <label>Xizmat<select name="service_id" defaultValue={chosen?.id || ""} required><option value="">Tanlang</option>{availableServices.map((item) => <option key={item.id} value={item.id}>{item.name} · {sum(item.price)}</option>)}</select></label>
-          <div className="form-grid">
-            <FormField name="booking_date" label="Sana" type="date" />
-            <FormField name="booking_time" label="Soat (Buxoro vaqti)" type="time" />
-          </div>
+          <label>Avtomobil<select value={vehicleId} onChange={(event) => { setVehicleId(event.target.value); setStart(""); }} required><option value="">Tanlang</option>{vehicles.data.map((item) => <option key={item.id} value={item.id}>{item.make} {item.model} · {item.plate}</option>)}</select></label>
+          <label>Xizmat<select value={selectedService} onChange={(event) => { setServiceId(event.target.value); setStart(""); }} required><option value="">Tanlang</option>{availableServices.map((item) => <option key={item.id} value={item.id}>{item.name} · {sum(item.price)}</option>)}</select></label>
+          <label>Sana<input type="date" min={today} value={day} onChange={(event) => { setDay(event.target.value); setStart(""); }} required /></label>
+          {slots.loading && <p role="status">Bo‘sh vaqtlar yuklanmoqda…</p>}
+          {slots.error && <p role="alert">{slots.error} <button type="button" className="link-button" onClick={slots.reload}>Qayta urinish</button></p>}
+          {slots.data && <fieldset className="booking-slots"><legend>Bo‘sh vaqtlar (Buxoro vaqti)</legend>
+            {slots.data.length ? <div className="actions">{slots.data.map((slot) =>
+              <button type="button" key={slot} className={slot === start ? "primary" : "secondary"}
+                aria-pressed={slot === start} onClick={() => setStart(slot)}>{slot.slice(11, 16)}</button>
+            )}</div> : <p>Bu sanada bo‘sh vaqt yo‘q. Boshqa sanani tanlang.</p>}
+          </fieldset>}
           <FormField name="phone" label="Telefon" type="tel" value={me?.phone} pattern="[+]?[0-9]{7,15}" />
           <label>Muammo haqida izoh<textarea name="notes" maxLength={1200} rows={3} /></label>
         </> : <div className="form-grid">{fields.map(([name, label, type]) => <FormField key={name} name={name} label={label}
           type={type} value={chosen?.[name]} min={name === "year" ? 1900 : name === "mileage" ? 0 : undefined}
           required={name !== "image"} />)}</div>}
-        <button className="primary">{booking ? "Yozilishni tasdiqlash" : "Saqlash"}</button>
+        <button className="primary" disabled={pending || (booking && !canBook)}>{booking ? "Yozilishni tasdiqlash" : "Saqlash"}</button>
       </form>}
   </Modal>;
 }
@@ -110,19 +137,27 @@ function Maintenance({ item, close, run }) {
   </Modal>;
 }
 
-export function Profile({ me, vehicles, modal, run, setLanguage, language, setTheme, theme, go }) {
+export function Profile({ me, vehicles, modal, run, setLanguage, language, setTheme, theme, go, pending }) {
   const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
   const photo = telegramUser?.photo_url;
   const notices = useRemote("/notifications", undefined, Boolean(me.data));
   function submit(event) {
     event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget));
-    values.phone ||= null;
+    const input = String(new FormData(event.currentTarget).get("phone"));
+    const phone = input.startsWith("+") ? input
+      : input.length === 9 ? `+998${input}` : input ? `+${input}` : null;
     run(async () => {
-      await request("/me", "put", values);
-      setLanguage(values.language);
-      me.reload();
-    }, "Profil sozlamalari yangilandi");
+      await request("/me", "patch", { phone });
+      me.updateData({ phone });
+    }, "Telefon raqami saqlandi");
+  }
+  function changeLanguage(event) {
+    const next = event.target.value;
+    run(async () => {
+      await request("/me", "patch", { language: next });
+      setLanguage(next);
+      me.updateData({ language: next });
+    }, "Til saqlandi");
   }
   return <section className="view">
     <div className="section-heading"><div><p className="eyebrow">Shaxsiy kabinet</p><h1>Profil</h1></div>
@@ -132,10 +167,12 @@ export function Profile({ me, vehicles, modal, run, setLanguage, language, setTh
       <div className="profile-name">{photo?.startsWith("https://") ? <img src={photo} alt="" /> : <span>{me.data.first_name[0]}</span>}
         <div><h2>{me.data.first_name}</h2>{me.data.username && <p>@{me.data.username}</p>}
           {Number.isSafeInteger(telegramUser?.id) && <p>Telegram ID: {telegramUser.id}</p>}</div></div>
-      <form onSubmit={submit}><FormField name="phone" label="Telefon" type="tel" value={me.data.phone} required={false} pattern="[+]?[0-9]{7,15}" />
-        <label>Til<select name="language" defaultValue={me.data.language || language}><option value="uz">O‘zbekcha</option><option value="ru">Русский</option><option value="en">English</option></select></label>
+      <form onSubmit={submit}><FormField name="phone" label="Telefon" type="tel" value={me.data.phone} required={false} pattern="[+]?[0-9]{7,15}" placeholder="+998901234567" autoComplete="tel" />
+        <button className="primary" disabled={pending}>Telefonni saqlash</button></form>
+      <div className="profile-preferences">
+        <label>Til<select value={language} disabled={pending} onChange={changeLanguage}><option value="uz">O‘zbekcha</option><option value="ru">Русский</option><option value="en">English</option></select></label>
         <label>Mavzu<select value={theme} onChange={(event) => setTheme(event.target.value)}><option value="dark">Qorong‘i</option><option value="light">Yorug‘</option></select></label>
-        <button className="primary">Sozlamalarni saqlash</button></form>
+      </div>
       </div><div className="panel"><h2>Bildirishnomalar</h2>{notices.data?.length
         ? notices.data.map((notice) => <p key={notice.id}>{notice.message}</p>) : <p>Yangi bildirishnomalar yo‘q.</p>}
         <div className="actions"><button className="secondary" onClick={() => go("orders")}>Buyurtmalar tarixi</button>
@@ -159,7 +196,10 @@ export function Orders() {
     {(bookings.error || orders.error) && <p className="empty" role="alert">{bookings.error || orders.error}</p>}
     <div className="profile-grid">
       <div className="panel history"><h2><CalendarDays size={20} /> Avtoservis yozilishlari</h2>
-        {bookings.data?.map((row) => <article key={row.id}><span><Wrench size={15} /> #{row.id} · {dateDisplay.format(new Date(row.starts_at))}</span><span>{statuses[row.status]}</span></article>)}
+        {bookings.data?.map((row) => <article key={row.id}>
+          <div><strong>{row.service_name || "Avtoservis xizmati"}</strong><p><Wrench size={15} /> #{row.id} · {dateDisplay.format(new Date(row.starts_at))}</p></div>
+          <span>{row.status === "new" ? "Admin tasdig‘i kutilmoqda" : statuses[row.status]}</span>
+        </article>)}
         {!bookings.loading && !bookings.error && !bookings.data?.length && <p>Yozilishlar mavjud emas.</p>}</div>
       <div className="panel history"><h2><ShoppingBag size={20} /> Ehtiyot qismlar buyurtmalari</h2>
         {orders.data?.map((row) => <article key={row.id}><div>#{row.id} · {sum(row.total)}<p>{row.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</p></div><span>{statuses[row.status]}</span></article>)}

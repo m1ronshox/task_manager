@@ -1,5 +1,6 @@
 import os
-from datetime import datetime, timedelta, timezone
+import re
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Annotated, Literal
 
@@ -18,7 +19,8 @@ from automotive_schemas import (
     QuantityInput, ServiceInput, StatusInput, VehicleInput,
 )
 from automotive_service import (
-    change_status, checkout, get_cart, notify, owned_vehicle, require_row, reserve, send_telegram,
+    booking_service, change_status, checkout, get_cart, notify, overlapping_bookings,
+    owned_vehicle, require_row, reserve, send_telegram,
 )
 from database import get_db
 from models import User
@@ -115,8 +117,17 @@ def me(db: Db, user: Customer):
 
 @router.put("/me")
 def update_profile(data: ProfileInput, db: Db, user: Customer):
+    return save_profile(db, user, data.model_dump())
+
+
+@router.patch("/me")
+def patch_profile(data: ProfileInput, db: Db, user: Customer):
+    return save_profile(db, user, data.model_dump(exclude_unset=True))
+
+
+def save_profile(db, user, values):
     db.scalar(select(User.id).where(User.id == user.id).with_for_update())
-    return save(db, db.get(Profile, user.id) or Profile(user_id=user.id), data.model_dump())
+    return save(db, db.get(Profile, user.id) or Profile(user_id=user.id), values)
 
 
 @router.get("/vehicles")
@@ -163,7 +174,42 @@ def add_maintenance(key: int, data: MaintenanceInput, db: Db, user: Customer):
 
 @router.get("/bookings")
 def bookings(db: Db, user: Customer):
-    return list_rows(db, select(Booking).where(Booking.user_id == user.id).order_by(Booking.id.desc()))
+    rows = db.execute(
+        select(Booking, Service.name).join(Service, Booking.service_id == Service.id, isouter=True)
+        .where(Booking.user_id == user.id).order_by(Booking.id.desc())
+    )
+    return [dict(present(row), service_name=name) for row, name in rows]
+
+
+@router.get("/bookings/slots")
+def booking_slots(db: Db, user: Customer, vehicle_id: int, service_id: int, day: date):
+    local_zone = ZoneInfo("Asia/Tashkent")
+    now = datetime.now(local_zone)
+    if day < now.date():
+        return []
+    if day > now.date() + timedelta(days=60):
+        raise HTTPException(422, "Keyingi 60 kun ichidan sana tanlang")
+    service = booking_service(db, user, vehicle_id, service_id)
+    settings = db.get(BusinessSettings, 1)
+    hours = settings.hours if settings else None
+    opening, closing = time(9), time(18)
+    if match := re.fullmatch(r"\s*((?:[01]\d|2[0-3]):[0-5]\d)\s*[–—-]\s*((?:[01]\d|2[0-3]):[0-5]\d)\s*", hours or ""):
+        configured_open, configured_close = map(time.fromisoformat, match.groups())
+        if configured_open < configured_close:
+            opening, closing = configured_open, configured_close
+    opens = datetime.combine(day, opening, local_zone).astimezone(timezone.utc)
+    closes = datetime.combine(day, closing, local_zone).astimezone(timezone.utc)
+    duration = timedelta(minutes=service.duration)
+    busy = list_rows(db, overlapping_bookings(vehicle_id, service_id, opens, closes))
+    slots = []
+    for minutes in range(0, int((closes - opens).total_seconds() // 60), 30):
+        start = opens + timedelta(minutes=minutes)
+        end = start + duration
+        if start > now and end <= closes and not any(
+            row["starts_at"] < end and row["ends_at"] > start for row in busy
+        ):
+            slots.append(start.astimezone(local_zone))
+    return slots
 
 
 @router.post("/bookings", status_code=201)
